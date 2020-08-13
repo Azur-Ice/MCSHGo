@@ -1,0 +1,10 @@
+servers:
+    1.16.2 flat:
+        rootFolder: G:\_MC\_Server\_AzurCraft\1.16.2 flat
+        scriptFile: 1.16.2 flat.bat
+    1.16.2-sit creative:
+        rootFolder: G:\_MC\_Server\_AzurCraft\1.16.2-sit creative
+        scriptFile: 1.16.2-sit creative.bat
+    1.16.2-sit survival:
+        rootFolder: G:\_MC\_Server\_AzurCraft\1.16.2-sit survival
+        scriptFile: 1.16.2-sit survival.bat
