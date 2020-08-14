@@ -70,7 +70,7 @@ func runServer(name string, serverConfig structServerConfig, writeClosers map[st
 		wg.Done()
 		return err
 	}
-	cmd := exec.Command(path.Join(wd, "scripts", serverConfig.ScriptFile))
+	cmd := exec.Command(path.Join(wd, "Scripts", serverConfig.ScriptFile))
 
 	writeClosers[name], _ = cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()
@@ -159,7 +159,7 @@ var writeClosers = make(map[string]io.WriteCloser)
 var wd = ""
 
 func init() {
-	os.Mkdir("scripts", 0666)
+	os.Mkdir("Scripts", 0666)
 	wd, _ = os.Getwd()
 	readConfig()
 }
