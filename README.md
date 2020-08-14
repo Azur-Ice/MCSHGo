@@ -40,7 +40,7 @@ servers:
 - input:
     Use `<serverName> | xxx` to write `xxx` to `serverName`.
 - output:
-    It will present out put from each server like this:
+    It will present output from each server like this:
     ```
     YYYY-MM-DD HH:MM:SS [<serverName>/INFO]: ......
     YYYY-MM-DD HH:MM:SS [<serverName>/WARN]: ......
