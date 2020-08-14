@@ -19,19 +19,18 @@ import (
 )
 
 var (
-	scriptFileType string
-	workDir, _     = os.Getwd()
-	scriptsDir, _  = filepath.Abs("./Scripts")
+	workDir, _    = os.Getwd()
+	scriptsDir, _ = filepath.Abs("./Scripts")
+	scriptSuffix  = ""
 )
 
 var wg sync.WaitGroup
 
-// var writeClosers = make(map[string]io.WriteCloser)
+///// config part /////
 
 // ServerConfig holds all fields of every server in "config.yml/servers"
 type ServerConfig struct {
 	RootFolder string `yaml:"rootFolder"`
-	ScriptFile string `yaml:"scriptFile"`
 }
 
 // Config holds all fields in "config.yml"
@@ -43,10 +42,11 @@ var mcshConfig = Config{
 	Servers: map[string]ServerConfig{
 		"serverName1": ServerConfig{
 			RootFolder: "path/to/your/server/root/folder",
-			ScriptFile: "script_file_name.xx",
 		},
 	},
 }
+
+///// server part /////
 
 // Server contains info of a server
 type Server struct {
@@ -57,53 +57,25 @@ type Server struct {
 }
 
 func (server *Server) run() {
-	log.Println(exec.LookPath(path.Join(scriptsDir, server.name)))
-	cmd := exec.Command(path.Join(scriptsDir, server.name))
-	server.stdin, _ = cmd.StdinPipe()
-	server.stdout, _ = cmd.StdoutPipe()
-	server.stderr, _ = cmd.StderrPipe()
-	if err := cmd.Start(); err != nil {
-		log.Panicf("server<%s>: Error when starting server<%s>......", server.name, err.Error())
-	}
-	go asyncLog(server.name, server.stdout)
-	go asyncLog(server.name, server.stderr)
-	if err := cmd.Wait(); err != nil {
-		log.Panicf("server<%s>: Error when running server<%s>......", server.name, err.Error())
-	}
 	defer func() {
 		recover()
 		wg.Done()
 		return
 	}()
-}
-func (server *Server) stop() {
-	server.stdin.Write([]byte("stop\n"))
-}
-
-func data2yaml(data Config) []byte {
-	yaml, err := yaml.Marshal(&data)
-	if err != nil {
-		fmt.Println(err)
+	// fmt.Println(exec.LookPath(path.Join(scriptsDir, server.name+scriptSuffix)))
+	cmd := exec.Command(path.Join(scriptsDir, server.name+scriptSuffix))
+	server.stdin, _ = cmd.StdinPipe()
+	server.stdout, _ = cmd.StdoutPipe()
+	server.stderr, _ = cmd.StderrPipe()
+	if err := cmd.Start(); err != nil {
+		log.Panicf("server<%s>: Error when starting:\n%s", server.name, err.Error())
 	}
-	return yaml
-}
-
-func readConfig() {
-	configYaml, err := ioutil.ReadFile("./config.yml")
-	if err != nil { // 读取文件发生错误
-		if os.IsNotExist(err) { // 文件不存在，创建并写入默认配置
-			log.Println("MCSH: Cannot find config.yml, creating...")
-			ioutil.WriteFile("./config.yml", data2yaml(mcshConfig), 0666)
-			log.Println("MCSH: Successful created config.yml, please complete the config.")
-			os.Exit(1)
-		}
-		fmt.Println(err)
-		os.Exit(1)
+	go asyncLog(server.name, server.stdout)
+	go asyncLog(server.name, server.stderr)
+	if err := cmd.Wait(); err != nil {
+		log.Panicf("server<%s>: Error when running:\n%s", server.name, err.Error())
 	}
-	mcshConfig = Config{}
-	err = yaml.Unmarshal(configYaml, &mcshConfig)
 }
-
 func asyncLog(name string, readCloser io.ReadCloser) error {
 	var outputReplaceRegString = `(\[\d\d:\d\d:\d\d\]) *\[.+?\/(.+?)\]`
 	outputReplaceReg, err := regexp.Compile(outputReplaceRegString)
@@ -168,15 +140,41 @@ func asyncForwardStdin() {
 	}
 }
 
+///// util part /////
+
+func data2yaml(data Config) []byte {
+	yaml, err := yaml.Marshal(&data)
+	if err != nil {
+		fmt.Println(err)
+	}
+	return yaml
+}
+
+///// others /////
+
+func readConfig() {
+	configYaml, err := ioutil.ReadFile("./config.yml")
+	if err != nil { // 读取文件发生错误
+		if os.IsNotExist(err) { // 文件不存在，创建并写入默认配置
+			log.Println("MCSH: Cannot find config.yml, creating...")
+			ioutil.WriteFile("./config.yml", data2yaml(mcshConfig), 0666)
+			log.Println("MCSH: Successful created config.yml, please complete the config.")
+			os.Exit(1)
+		}
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	mcshConfig = Config{}
+	err = yaml.Unmarshal(configYaml, &mcshConfig)
+}
 func init() {
 	os.Mkdir(scriptsDir, 0666)
 	readConfig()
+	log.Println("MCSH[init/INFO]: Running on", runtime.GOOS)
 	if runtime.GOOS == "windows" {
-		scriptFileType = ".bat"
-	} else if runtime.GOOS == "linux" {
-		scriptFileType = ".sh"
+		scriptSuffix = ".bat"
 	} else {
-		log.Fatalln("MCSH[init/ERROR]: OS " + runtime.GOOS + "is not supported yet.")
+		scriptSuffix = ".sh"
 	}
 }
 
