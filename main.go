@@ -9,36 +9,82 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 
 	"gopkg.in/yaml.v3"
 )
 
-type structServerConfig struct {
+var (
+	scriptFileType string
+	workDir, _     = os.Getwd()
+	scriptsDir, _  = filepath.Abs("./Scripts")
+)
+
+var wg sync.WaitGroup
+
+// var writeClosers = make(map[string]io.WriteCloser)
+
+// ServerConfig holds all fields of every server in "config.yml/servers"
+type ServerConfig struct {
 	RootFolder string `yaml:"rootFolder"`
 	ScriptFile string `yaml:"scriptFile"`
 }
-type structMCSHConfig struct {
-	Servers map[string]structServerConfig `yaml:"servers"`
+
+// Config holds all fields in "config.yml"
+type Config struct {
+	Servers map[string]ServerConfig `yaml:"servers"`
 }
 
-var mcshConfig = structMCSHConfig{
-	Servers: map[string]structServerConfig{
-		"serverName1": structServerConfig{
+var mcshConfig = Config{
+	Servers: map[string]ServerConfig{
+		"serverName1": ServerConfig{
 			RootFolder: "path/to/your/server/root/folder",
-			ScriptFile: "your/script/file/name/in/the/server/root/folder",
+			ScriptFile: "script_file_name.xx",
 		},
 	},
 }
 
-func data2yaml(data structMCSHConfig) []byte {
+// Server contains info of a server
+type Server struct {
+	name           string
+	config         ServerConfig
+	stdin          io.WriteCloser
+	stdout, stderr io.ReadCloser
+}
+
+func (server *Server) run() {
+	log.Println(exec.LookPath(path.Join(scriptsDir, server.name)))
+	cmd := exec.Command(path.Join(scriptsDir, server.name))
+	server.stdin, _ = cmd.StdinPipe()
+	server.stdout, _ = cmd.StdoutPipe()
+	server.stderr, _ = cmd.StderrPipe()
+	if err := cmd.Start(); err != nil {
+		log.Panicf("server<%s>: Error when starting server<%s>......", server.name, err.Error())
+	}
+	go asyncLog(server.name, server.stdout)
+	go asyncLog(server.name, server.stderr)
+	if err := cmd.Wait(); err != nil {
+		log.Panicf("server<%s>: Error when running server<%s>......", server.name, err.Error())
+	}
+	defer func() {
+		recover()
+		wg.Done()
+		return
+	}()
+}
+func (server *Server) stop() {
+	server.stdin.Write([]byte("stop\n"))
+}
+
+func data2yaml(data Config) []byte {
 	yaml, err := yaml.Marshal(&data)
 	if err != nil {
 		fmt.Println(err)
 	}
-	// fmt.Println(yaml)
 	return yaml
 }
 
@@ -54,43 +100,8 @@ func readConfig() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	mcshConfig = structMCSHConfig{}
+	mcshConfig = Config{}
 	err = yaml.Unmarshal(configYaml, &mcshConfig)
-	// fmt.Printf("mcshConfig:\n%v\n", mcshConfig)
-}
-
-func runServer(name string, serverConfig structServerConfig, writeClosers map[string]io.WriteCloser) error {
-	if err := os.Chdir(serverConfig.RootFolder); err != nil {
-		if os.IsNotExist(err) {
-			log.Printf("server<%s>: Cannot find server root folder, please check your \"config.yml\"", name)
-			wg.Done()
-			return err
-		}
-		log.Printf("server<%s>: Error when chdir to server root folder - %s", name, err.Error())
-		wg.Done()
-		return err
-	}
-	cmd := exec.Command(path.Join(wd, "Scripts", serverConfig.ScriptFile))
-
-	writeClosers[name], _ = cmd.StdinPipe()
-	stdout, _ := cmd.StdoutPipe()
-	stderr, _ := cmd.StderrPipe()
-
-	if err := cmd.Start(); err != nil {
-		log.Printf("server<%s>: Error startingup: %s......", name, err.Error())
-		wg.Done()
-		return err
-	}
-	go asyncLog(name, stdout)
-	go asyncLog(name, stderr)
-
-	if err := cmd.Wait(); err != nil {
-		log.Printf("server<%s>: Error running: %s......", name, err.Error())
-		wg.Done()
-		return err
-	}
-	wg.Done()
-	return nil
 }
 
 func asyncLog(name string, readCloser io.ReadCloser) error {
@@ -139,36 +150,43 @@ func asyncForwardStdin() {
 			res := forwardReg.FindSubmatch(line)
 			if res != nil {
 				// log.Println(res)
-				_, valid := writeClosers[string(res[1])]
+				server, valid := servers[string(res[1])]
 				if valid {
-					_, errWrite := writeClosers[string(res[1])].Write(append(res[2], '\n'))
+					_, errWrite := server.stdin.Write(append(res[2], '\n'))
 					if errWrite != nil {
 						log.Println("MCSH[stdinForward/ERROR]: Server stdin write failed - ", errWrite)
 					}
 				} else {
 					log.Printf("MCSH[stdinForward/ERROR]: Cannot find running server <%v>\n", string(res[1]))
 				}
+			} else {
+				for _, server := range servers {
+					server.stdin.Write(append(line, '\n'))
+				}
 			}
 		}
 	}
 }
 
-var wg sync.WaitGroup
-
-var writeClosers = make(map[string]io.WriteCloser)
-var wd = ""
-
 func init() {
-	os.Mkdir("Scripts", 0666)
-	wd, _ = os.Getwd()
+	os.Mkdir(scriptsDir, 0666)
 	readConfig()
+	if runtime.GOOS == "windows" {
+		scriptFileType = ".bat"
+	} else if runtime.GOOS == "linux" {
+		scriptFileType = ".sh"
+	} else {
+		log.Fatalln("MCSH[init/ERROR]: OS " + runtime.GOOS + "is not supported yet.")
+	}
 }
+
+var servers = make(map[string]*Server)
 
 func main() {
 	// readConfig()
 	for name, serverConfig := range mcshConfig.Servers {
-		// fmt.Printf("server<%v> \n\troot:%v\n\tscript:%v\n", name, serverConfig.RootFolder, serverConfig.ScriptFile)
-		go runServer(name, serverConfig, writeClosers)
+		servers[name] = &Server{name: name, config: serverConfig}
+		go servers[name].run()
 		wg.Add(1)
 	}
 	go asyncForwardStdin()

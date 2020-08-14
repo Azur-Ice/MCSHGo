@@ -7,7 +7,6 @@ File structure of **MCSHGo** :
 MCSHGO/
 │  config.yml
 │  MCSHGo
-│  README.md
 │
 └─Scripts/
         serverName1.bat
@@ -39,6 +38,7 @@ servers:
 ## IO for each server.
 - input:
     Use `<serverName> | xxx` to write `xxx` to `serverName`.
+    Otherwise, the input will be written to every server.
 - output:
     It will present output from each server like this:
     ```
