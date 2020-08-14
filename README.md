@@ -31,6 +31,7 @@ servers:
 MCSHGo will use the scriptFile with the same name of the server to start it up.\
 The script file should contains "chdir" part and "run server" part.
 > On linux, the sscript file should be a valid sh script.
+> And it must have permission of executing. (`sudo chmod +x yourScriptName.sh`)
 Example for Windows:
 ```bat
 cd G:\_MC\_Server\_AzurCraft\1.16.2 flat && G: && java -jar -Xms6g -Xmx6g fabric-server-launch.jar --nogui
