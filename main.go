@@ -23,8 +23,26 @@ var (
 	scriptsDir, _ = filepath.Abs("./Scripts")
 	scriptSuffix  = ""
 )
+var (
+	commandRegexString string
+	commandRegex       *regexp.Regexp
+)
+
+var cmds = make(map[string]interface{})
 
 var wg sync.WaitGroup
+
+///// command part /////
+
+// Command describe args of a command
+type Command struct {
+	cmd  string
+	args []string
+}
+
+func backup(server *Server, args []string) {
+	log.Println("MCSH[command-backup/INFO]: Backup!")
+}
 
 ///// config part /////
 
@@ -35,10 +53,12 @@ type ServerConfig struct {
 
 // Config holds all fields in "config.yml"
 type Config struct {
-	Servers map[string]ServerConfig `yaml:"servers"`
+	CommandPrefix string                  `yaml:"command_prefix"`
+	Servers       map[string]ServerConfig `yaml:"servers"`
 }
 
 var mcshConfig = Config{
+	CommandPrefix: "#",
 	Servers: map[string]ServerConfig{
 		"serverName1": ServerConfig{
 			RootFolder: "path/to/your/server/root/folder",
@@ -52,6 +72,7 @@ var mcshConfig = Config{
 type Server struct {
 	name           string
 	config         ServerConfig
+	online         bool
 	stdin          io.WriteCloser
 	stdout, stderr io.ReadCloser
 }
@@ -59,6 +80,7 @@ type Server struct {
 func (server *Server) run() {
 	defer func() {
 		recover()
+		server.online = false
 		wg.Done()
 		return
 	}()
@@ -70,6 +92,7 @@ func (server *Server) run() {
 	if err := cmd.Start(); err != nil {
 		log.Panicf("server<%s>: Error when starting:\n%s", server.name, err.Error())
 	}
+	server.online = true
 	go asyncLog(server.name, server.stdout)
 	go asyncLog(server.name, server.stderr)
 	if err := cmd.Wait(); err != nil {
@@ -124,9 +147,24 @@ func asyncForwardStdin() {
 				// log.Println(res)
 				server, valid := servers[string(res[1])]
 				if valid {
-					_, errWrite := server.stdin.Write(append(res[2], '\n'))
-					if errWrite != nil {
-						log.Println("MCSH[stdinForward/ERROR]: Server stdin write failed - ", errWrite)
+					if command, ok := getCommand(res[2]); ok { // is #Command, execute
+						fmt.Println(command)
+						if command.cmd == "run" && !server.online {
+							server.run()
+						}
+
+						cmdFun, exist := cmds[command.cmd]
+						if !exist {
+							log.Println("MCSH[stdinForward/ERROR]: Command \"" + command.cmd + "\" not found.")
+						} else {
+							cmdFun.(func(server *Server, args []string))(server, command.args)
+						}
+
+					} else {
+						_, errWrite := server.stdin.Write(append(res[2], '\n')) // is not #Command, forward
+						if errWrite != nil {
+							log.Println("MCSH[stdinForward/ERROR]: Server stdin write failed - ", errWrite)
+						}
 					}
 				} else {
 					log.Printf("MCSH[stdinForward/ERROR]: Cannot find running server <%v>\n", string(res[1]))
@@ -150,8 +188,23 @@ func data2yaml(data Config) []byte {
 	return yaml
 }
 
-///// others /////
+func getCommand(str []byte) (Command, bool) {
+	command := Command{}
+	commandStr := commandRegex.FindSubmatch(str)[1]
+	fmt.Println(commandStr)
+	if string(commandStr) == "" { // 命令为空
+		return command, false
+	}
 
+	cmd := strings.Split(string(commandStr), " ")
+	command.cmd = cmd[0]
+	if len(cmd) > 1 {
+		command.args = cmd[1:]
+	}
+	fmt.Println(command)
+
+	return command, true
+}
 func readConfig() {
 	configYaml, err := ioutil.ReadFile("./config.yml")
 	if err != nil { // 读取文件发生错误
@@ -167,9 +220,17 @@ func readConfig() {
 	mcshConfig = Config{}
 	err = yaml.Unmarshal(configYaml, &mcshConfig)
 }
+
+///// others /////
+func initCommands() {
+	cmds["backup"] = backup
+}
 func init() {
 	os.Mkdir(scriptsDir, 0666)
 	readConfig()
+	commandRegexString = "^" + mcshConfig.CommandPrefix + "(.*)"
+	fmt.Println(commandRegexString)
+	commandRegex = regexp.MustCompile(commandRegexString)
 	log.Println("MCSH[init/INFO]: Running on", runtime.GOOS)
 	if runtime.GOOS == "windows" {
 		scriptSuffix = ".bat"
