@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -21,6 +22,7 @@ import (
 var (
 	workDir, _    = os.Getwd()
 	scriptsDir, _ = filepath.Abs("./Scripts")
+	backupsDir, _ = filepath.Abs("./Backups")
 	scriptSuffix  = ""
 )
 var (
@@ -40,8 +42,23 @@ type Command struct {
 	args []string
 }
 
-func backup(server *Server, args []string) {
-	log.Println("MCSH[command-backup/INFO]: Backup!")
+func backup(server *Server, args []string) error {
+	if args[0] == "make" {
+		comment := ""
+		if len(args) > 1 {
+			comment = strings.Join(args[1:], "")
+		}
+		dst := path.Join(backupsDir, fmt.Sprintf("%s - %s %s", server.name, getTimeStamp(), comment))
+		src := path.Join(server.config.RootFolder, "world")
+		log.Printf("[%s/INFO]: Making backup to %s...\n", server.name, dst)
+		err := copyDir(src, dst)
+		if err != nil {
+			log.Printf("[%s/ERROR]: Backup making failed.\n", server.name)
+			return err
+		}
+		log.Printf("[%s/INFO]: Backup making successed.\n", server.name)
+	}
+	return nil
 }
 
 ///// config part /////
@@ -148,7 +165,7 @@ func asyncForwardStdin() {
 				server, valid := servers[string(res[1])]
 				if valid {
 					if command, ok := getCommand(res[2]); ok { // is #Command, execute
-						fmt.Println(command)
+						// fmt.Println(command)
 						if command.cmd == "run" && !server.online {
 							server.run()
 						}
@@ -157,7 +174,7 @@ func asyncForwardStdin() {
 						if !exist {
 							log.Println("MCSH[stdinForward/ERROR]: Command \"" + command.cmd + "\" not found.")
 						} else {
-							cmdFun.(func(server *Server, args []string))(server, command.args)
+							cmdFun.(func(server *Server, args []string) error)(server, command.args)
 						}
 
 					} else {
@@ -179,7 +196,40 @@ func asyncForwardStdin() {
 }
 
 ///// util part /////
+func getTimeStamp() string {
+	return time.Now().Format("2006-01-02 15-04-05")
+}
+func copyFile(src string, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
 
+	_, err = io.Copy(dstFile, srcFile)
+	return err
+}
+func copyDir(srcDir string, dstDir string) error {
+	err := os.Mkdir(dstDir, 0666)
+	if err != nil {
+		log.Println(err)
+	}
+	fileInfoList, _ := ioutil.ReadDir(srcDir)
+	for i := 0; i < len(fileInfoList); i++ {
+		// fmt.Println("Copying: ", fileInfoList[i].Name(), fileInfoList[i].IsDir(), "...")
+		if fileInfoList[i].IsDir() {
+			copyDir(path.Join(srcDir, fileInfoList[i].Name()), path.Join(dstDir, fileInfoList[i].Name()))
+		} else {
+			copyFile(path.Join(srcDir, fileInfoList[i].Name()), path.Join(dstDir, fileInfoList[i].Name()))
+		}
+	}
+	return nil
+}
 func data2yaml(data Config) []byte {
 	yaml, err := yaml.Marshal(&data)
 	if err != nil {
@@ -187,11 +237,10 @@ func data2yaml(data Config) []byte {
 	}
 	return yaml
 }
-
 func getCommand(str []byte) (Command, bool) {
 	command := Command{}
 	commandStr := commandRegex.FindSubmatch(str)[1]
-	fmt.Println(commandStr)
+	// fmt.Println(commandStr)
 	if string(commandStr) == "" { // 命令为空
 		return command, false
 	}
@@ -201,7 +250,7 @@ func getCommand(str []byte) (Command, bool) {
 	if len(cmd) > 1 {
 		command.args = cmd[1:]
 	}
-	fmt.Println(command)
+	// fmt.Println(command)
 
 	return command, true
 }
@@ -225,13 +274,19 @@ func readConfig() {
 func initCommands() {
 	cmds["backup"] = backup
 }
-func init() {
-	os.Mkdir(scriptsDir, 0666)
-	readConfig()
+func initRegexs() {
 	commandRegexString = "^" + mcshConfig.CommandPrefix + "(.*)"
-	fmt.Println(commandRegexString)
 	commandRegex = regexp.MustCompile(commandRegexString)
-	log.Println("MCSH[init/INFO]: Running on", runtime.GOOS)
+}
+func initDirs() {
+	os.Mkdir(scriptsDir, 0666)
+	os.Mkdir(backupsDir, 0666)
+}
+func init() {
+	initCommands()
+	initRegexs()
+	readConfig()
+	log.Println("[MCSH/INFO]: Running on", runtime.GOOS)
 	if runtime.GOOS == "windows" {
 		scriptSuffix = ".bat"
 	} else {
@@ -242,7 +297,7 @@ func init() {
 var servers = make(map[string]*Server)
 
 func main() {
-	// readConfig()
+	// goto test
 	for name, serverConfig := range mcshConfig.Servers {
 		servers[name] = &Server{name: name, config: serverConfig}
 		go servers[name].run()
@@ -250,4 +305,8 @@ func main() {
 	}
 	go asyncForwardStdin()
 	wg.Wait()
+	// test:
+	// 	os.Mkdir(path.Join(workDir, "test"), 0666)
+	// 	fmt.Println(path.Join(workDir, "test"))
+	// 	fmt.Println(getTimeStamp())
 }
