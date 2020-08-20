@@ -239,9 +239,11 @@ func data2yaml(data Config) []byte {
 }
 func getCommand(str []byte) (Command, bool) {
 	command := Command{}
-	commandStr := commandRegex.FindSubmatch(str)[1]
-	// fmt.Println(commandStr)
-	if string(commandStr) == "" { // 命令为空
+	commandStr := ""
+	if res := commandRegex.FindSubmatch(str); len(res) > 1 {
+		commandStr = string(res[1])
+	}
+	if commandStr == "" { // 命令为空
 		return command, false
 	}
 
@@ -283,8 +285,9 @@ func initDirs() {
 	os.Mkdir(backupsDir, 0666)
 }
 func init() {
-	initCommands()
 	initRegexs()
+	initCommands()
+	initDirs()
 	readConfig()
 	log.Println("[MCSH/INFO]: Running on", runtime.GOOS)
 	if runtime.GOOS == "windows" {
