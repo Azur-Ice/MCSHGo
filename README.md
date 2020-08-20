@@ -95,3 +95,5 @@ If you do `#xxx abc defgh ijk` \
 
 		> stop the server, backup your server with comment `Restore2<backupName>` , Not developed yet.
 
+- `run`
+    - After you stoped some server, you can use this command to run it again.
