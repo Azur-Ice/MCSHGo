@@ -19,15 +19,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Dirs
 var (
 	workDir, _    = os.Getwd()
 	scriptsDir, _ = filepath.Abs("./Scripts")
 	backupsDir, _ = filepath.Abs("./Backups")
-	scriptSuffix  = ""
 )
+var scriptSuffix = ""
 var (
-	commandRegexString string
-	commandRegex       *regexp.Regexp
+	commandRegex    *regexp.Regexp
+	forwardReg      *regexp.Regexp
+	outputFormatReg *regexp.Regexp
 )
 
 var cmds = make(map[string]interface{})
@@ -110,62 +112,53 @@ func (server *Server) run() {
 		log.Panicf("server<%s>: Error when starting:\n%s", server.name, err.Error())
 	}
 	server.online = true
-	go asyncLog(server.name, server.stdout)
-	go asyncLog(server.name, server.stderr)
+	go server.forwardStdout()
 	if err := cmd.Wait(); err != nil {
 		log.Panicf("server<%s>: Error when running:\n%s", server.name, err.Error())
 	}
 }
-func asyncLog(name string, readCloser io.ReadCloser) error {
-	var outputReplaceRegString = `(\[\d\d:\d\d:\d\d\]) *\[.+?\/(.+?)\]`
-	outputReplaceReg, err := regexp.Compile(outputReplaceRegString)
-	if err != nil {
-		log.Println("MCSH[outputForward/ERROR]: Regex compile failed - ", err)
-	}
+func (server *Server) forwardStdout() {
+	defer func() {
+		recover()
+		return
+	}()
 	cache := ""
 	buf := make([]byte, 1024)
 	for {
-		num, err := readCloser.Read(buf)
-		if err != nil && err != io.EOF {
-			return err
+		num, err := server.stdout.Read(buf)
+		if err != nil && err != io.EOF { //非EOF错误
+			log.Panicln(err)
 		}
 		if num > 0 {
-			// b := buf[:num]
-			s := outputReplaceReg.ReplaceAllString(string(buf[:num]), "["+name+"/$2]")
-			lines := strings.Split(s, "\n")
-			lines[0] = cache + lines[0]
+			str := outputFormatReg.ReplaceAllString(cache+string(buf[:num]), "["+server.name+"/$2]") // 格式化读入的字符串
+			lines := strings.SplitAfter(str, "\n")                                                   // 按行分割开
 			for i := 0; i < len(lines)-1; i++ {
-				log.Println(lines[i])
+				log.Print(lines[i])
 			}
-			cache = lines[len(lines)-1]
+			cache = lines[len(lines)-1] //最后一行下次循环处理
 		}
 	}
 }
-func asyncForwardStdin() {
-	var forwardRegString = `(.+?) *\| *(.+)`
-	forwardReg, errCompile := regexp.Compile(forwardRegString)
-	if errCompile != nil {
-		log.Println("MCSH[stdinForward/ERROR]: Regex compile failed - ", errCompile)
-	}
-
+func forwardStdin() {
 	stdinReader := bufio.NewReader(os.Stdin)
 	for {
 		line, errRead := stdinReader.ReadBytes('\n')
 		if errRead != nil {
 			log.Println("MCSH[stdinForward/ERROR]: ", errRead)
 		} else {
-			line = line[:len(line)-1]
-			if line[len(line)-1] == '\r' {
+			// 去掉换行符
+			if i := strings.LastIndex(string(line), "\r"); i > 0 {
+				line = line[:i]
+			} else {
 				line = line[:len(line)-1]
 			}
-			// log.Println(line)
+			// 转发正则
 			res := forwardReg.FindSubmatch(line)
-			if res != nil {
-				// log.Println(res)
+			if res != nil { // 特定服务器
 				server, valid := servers[string(res[1])]
 				if valid {
 					if command, ok := getCommand(res[2]); ok { // is #Command, execute
-						// fmt.Println(command)
+
 						if command.cmd == "run" && !server.online {
 							server.run()
 						}
@@ -186,7 +179,7 @@ func asyncForwardStdin() {
 				} else {
 					log.Printf("MCSH[stdinForward/ERROR]: Cannot find running server <%v>\n", string(res[1]))
 				}
-			} else {
+			} else { // 全部服务器
 				for _, server := range servers {
 					server.stdin.Write(append(line, '\n'))
 				}
@@ -277,8 +270,9 @@ func initCommands() {
 	cmds["backup"] = backup
 }
 func initRegexs() {
-	commandRegexString = "^" + mcshConfig.CommandPrefix + "(.*)"
-	commandRegex = regexp.MustCompile(commandRegexString)
+	commandRegex = regexp.MustCompile("^" + mcshConfig.CommandPrefix + "(.*)")
+	forwardReg = regexp.MustCompile(`(.+?) *\| *(.+)`)
+	outputFormatReg = regexp.MustCompile(`(\[\d\d:\d\d:\d\d\]) *\[.+?\/(.+?)\]`)
 }
 func initDirs() {
 	os.Mkdir(scriptsDir, 0666)
@@ -306,7 +300,7 @@ func main() {
 		go servers[name].run()
 		wg.Add(1)
 	}
-	go asyncForwardStdin()
+	go forwardStdin()
 	wg.Wait()
 	// test:
 	// 	os.Mkdir(path.Join(workDir, "test"), 0666)
