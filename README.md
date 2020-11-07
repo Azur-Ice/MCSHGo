@@ -39,11 +39,11 @@ servers:
     For each server, the **key** should be a custom name for it(and there should be a script file in `Script/` folder with the same name of it to start the server.), and the **value** should have **key** `rootFolder` .
     
     - `execOptions`
-        e.g. `-Xms4G -Xmm4G --nogui`.
+        e.g. `-Xms4G -Xmx4G`.
     - `execPath`
         The path to the `.jar` file of your server.
         > - When doing bacnup jobs, MCSH will use the dir of this path to locate `world/` folder.
-        > - Server will be using command `java -jar execOptions execPath` to start.
+        > - Server will be using command `java execOptions -jar execPath --nogui` to start.
 
 ### IO for each server
 

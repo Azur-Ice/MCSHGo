@@ -68,8 +68,8 @@ func backup(server *Server, args []string) error {
 // ServerConfig holds all fields of every server in "config.yml/servers"
 type ServerConfig struct {
 	// RootFolder string `yaml:"rootFolder"`
-	RunOptions string `yaml:"runOptions"`
-	ExecPath   string `yaml:"execPath"`
+	ExecOptions string `yaml:"execOptions"`
+	ExecPath    string `yaml:"execPath"`
 }
 
 // Config holds all fields in "config.yml"
@@ -82,8 +82,8 @@ var mcshConfig = Config{
 	CommandPrefix: "#",
 	Servers: map[string]ServerConfig{
 		"serverName1": ServerConfig{
-			RunOptions: "-Xms4G -Xmm4G --nogui",
-			ExecPath:   "path/to/your/server/s/exec/jar/file",
+			ExecOptions: "-Xms4G -Xmm4G --nogui",
+			ExecPath:    "path/to/your/server/s/exec/jar/file",
 			// RootFolder: "path/to/your/server/root/folder",
 		},
 	},
@@ -108,7 +108,7 @@ func (server *Server) run() {
 		return
 	}()
 	config := server.config
-	cmd := exec.Command("java", "-jar", config.RunOptions, config.ExecPath)
+	cmd := exec.Command("java", config.ExecOptions, "-jar", config.ExecPath, "--nogui")
 	cmd.Dir = filepath.Dir(config.ExecPath)
 	server.stdin, _ = cmd.StdinPipe()
 	server.stdout, _ = cmd.StdoutPipe()
