@@ -71,21 +71,21 @@ cd /mnt/g/_MC/_Server/_AzurCraft/1.16.2\ flat && java -jar -Xms6g -Xmx6g fabric-
 
 ### MCSH Commands
 
-A MCSH Commands is start with `#` for normal, you can configure it in `config.yml` .\
+A MCSH Commands is recognized with the prefix `#` for normal, you can configure it in `config.yml` .\
 
 If you do `#xxx abc defgh ijk` \
 
-`xxx abc defgh ijk` will be considered as a **MCSH Command** \
+`xxx abc defgh ijk` will be recognized as a **MCSH Command** \
 
 > You can also use `serverName|#xxx` to run **MCSH Command** in specified server, or it will execute for every server.
 
 - `backup [mode] [arg]`
 
-	- enter  ` `(empty) as `[mode]`
+	- enter ` `(empty) as `[mode]`
 
 		> Show the backup list, Not developed yet.
 
-	- enter  ` make` as `[mode]`
+	- enter ` make` as `[mode]`
 
 		`arg` is `comment` , optional.\
 

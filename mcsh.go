@@ -21,8 +21,8 @@ import (
 
 // Dirs
 var (
-	workDir, _    = os.Getwd()
-	scriptsDir, _ = filepath.Abs("./Scripts")
+	workDir, _ = os.Getwd()
+	// scriptsDir, _ = filepath.Abs("./Scripts")
 	backupsDir, _ = filepath.Abs("./Backups")
 )
 var scriptSuffix = ""
@@ -51,7 +51,7 @@ func backup(server *Server, args []string) error {
 			comment = strings.Join(args[1:], "")
 		}
 		dst := path.Join(backupsDir, fmt.Sprintf("%s - %s %s", server.name, getTimeStamp(), comment))
-		src := path.Join(server.config.RootFolder, "world")
+		src := path.Join(path.Dir(server.config.ExecPath), "world")
 		log.Printf("[%s/INFO]: Making backup to %s...\n", server.name, dst)
 		err := copyDir(src, dst)
 		if err != nil {
@@ -67,7 +67,9 @@ func backup(server *Server, args []string) error {
 
 // ServerConfig holds all fields of every server in "config.yml/servers"
 type ServerConfig struct {
-	RootFolder string `yaml:"rootFolder"`
+	// RootFolder string `yaml:"rootFolder"`
+	RunOptions string `yaml:"runOptions"`
+	ExecPath   string `yaml:"execPath"`
 }
 
 // Config holds all fields in "config.yml"
@@ -80,7 +82,9 @@ var mcshConfig = Config{
 	CommandPrefix: "#",
 	Servers: map[string]ServerConfig{
 		"serverName1": ServerConfig{
-			RootFolder: "path/to/your/server/root/folder",
+			RunOptions: "-Xms4G -Xmm4G --nogui",
+			ExecPath:   "path/to/your/server/s/exec/jar/file",
+			// RootFolder: "path/to/your/server/root/folder",
 		},
 	},
 }
@@ -103,8 +107,8 @@ func (server *Server) run() {
 		wg.Done()
 		return
 	}()
-	// fmt.Println(exec.LookPath(path.Join(scriptsDir, server.name+scriptSuffix)))
-	cmd := exec.Command(path.Join(scriptsDir, server.name+scriptSuffix))
+	config := server.config
+	cmd := exec.Command("java", "-jar", config.RunOptions, config.ExecPath)
 	server.stdin, _ = cmd.StdinPipe()
 	server.stdout, _ = cmd.StdoutPipe()
 	server.stderr, _ = cmd.StderrPipe()
@@ -275,7 +279,7 @@ func initRegexs() {
 	outputFormatReg = regexp.MustCompile(`(\[\d\d:\d\d:\d\d\]) *\[.+?\/(.+?)\]`)
 }
 func initDirs() {
-	os.Mkdir(scriptsDir, 0666)
+	// os.Mkdir(scriptsDir, 0666)
 	os.Mkdir(backupsDir, 0666)
 }
 func init() {
