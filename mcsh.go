@@ -51,7 +51,7 @@ func backup(server *Server, args []string) error {
 			comment = strings.Join(args[1:], "")
 		}
 		dst := path.Join(backupsDir, fmt.Sprintf("%s - %s %s", server.name, getTimeStamp(), comment))
-		src := path.Join(path.Dir(server.config.ExecPath), "world")
+		src := path.Join(filepath.Dir(server.config.ExecPath), "world")
 		log.Printf("[%s/INFO]: Making backup to %s...\n", server.name, dst)
 		err := copyDir(src, dst)
 		if err != nil {
@@ -109,6 +109,7 @@ func (server *Server) run() {
 	}()
 	config := server.config
 	cmd := exec.Command("java", "-jar", config.RunOptions, config.ExecPath)
+	cmd.Dir = filepath.Dir(config.ExecPath)
 	server.stdin, _ = cmd.StdinPipe()
 	server.stdout, _ = cmd.StdoutPipe()
 	server.stderr, _ = cmd.StderrPipe()

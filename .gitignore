@@ -1,4 +1,5 @@
-Releases
-Backups
+logs/
+Backups/
+Releases/
 build.bat
 go.sum
