@@ -11,10 +11,8 @@ MCSHGO/
 │  config.yml
 │  MCSHGo
 │
-└─Scripts/
-        serverName1.bat
-        serverName2.bat
-        ...
+└─Backups/
+    ...
 ```
 Fields in `config.yml`:
 ```
