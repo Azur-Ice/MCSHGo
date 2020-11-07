@@ -21,9 +21,11 @@ Fields in `config.yml`:
 command_prefix: "#"
 servers:
     serverName1:
-        rootFolder: ...
+        execOptions: ...
+        execPath: ...
     serverName2:
-        rootFolder: ...
+        execOptions: ...
+        execPath: ...
     ...
 ```
 - `command_prefix`
@@ -38,24 +40,12 @@ servers:
     It contains the information of all your server need to be managed with MCSHGo.
     For each server, the **key** should be a custom name for it(and there should be a script file in `Script/` folder with the same name of it to start the server.), and the **value** should have **key** `rootFolder` .
     
-    - `rootFolder`
-        This is where your `.jar` file is.
-
-MCSHGo will use the scriptFile with the same name of the server to start it up.\
-The script file should contains "chdir" part and "run server" part.
-> On linux, the sscript file should be a valid sh script.
-> And it must have permission of executing. (`sudo chmod +x yourScriptName.sh`)
-Example for Windows:
-```bat
-cd G:\_MC\_Server\_AzurCraft\1.16.2 flat && G: && java -jar -Xms6g -Xmx6g fabric-server-launch.jar --nogui
-```
-> `cd G:\_MC\_Server\_AzurCraft\1.16.2 flat && G:` is the "chdir" part, and the following things are "run server" part.
-Example for Linux:
-```sh
-#!/bin/sh
-cd /mnt/g/_MC/_Server/_AzurCraft/1.16.2\ flat && java -jar -Xms6g -Xmx6g fabric-server-launch.jar --nogui
-```
-> `cd /mnt/g/_MC/_Server/_AzurCraft/1.16.2\ flat` is the "chdir" part, and the following things are "run server" part.
+    - `execOptions`
+        e.g. `-Xms4G -Xmm4G --nogui`.
+    - `execPath`
+        The path to the `.jar` file of your server.
+        > - When doing bacnup jobs, MCSH will use the dir of this path to locate `world/` folder.
+        > - Server will be using command `java -jar execOptions execPath` to start.
 
 ### IO for each server
 
