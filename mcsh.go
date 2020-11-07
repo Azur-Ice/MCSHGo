@@ -107,10 +107,9 @@ func (server *Server) run() {
 		wg.Done()
 		return
 	}()
-	config := server.config
-	args := append(config.ExecOptions, "-jar", config.ExecPath, "--nogui")
+	args := append(server.config.ExecOptions, "-jar", server.config.ExecPath, "--nogui")
 	cmd := exec.Command("java", args...)
-	cmd.Dir = filepath.Dir(config.ExecPath)
+	cmd.Dir = filepath.Dir(server.config.ExecPath)
 	server.stdin, _ = cmd.StdinPipe()
 	server.stdout, _ = cmd.StdoutPipe()
 	server.stderr, _ = cmd.StderrPipe()
@@ -118,13 +117,13 @@ func (server *Server) run() {
 		log.Panicf("server<%s>: Error when starting:\n%s", server.name, err.Error())
 	}
 	server.online = true
-	go server.forwardStdout()
-	go server.forwardStderr()
+	go server.forwardStd(server.stdout)
+	go server.forwardStd(server.stderr)
 	if err := cmd.Wait(); err != nil {
 		log.Panicf("server<%s>: Error when running:\n%s", server.name, err.Error())
 	}
 }
-func (server *Server) forwardStdout() {
+func (server *Server) forwardStd(f io.ReadCloser) {
 	defer func() {
 		recover()
 		return
@@ -132,7 +131,7 @@ func (server *Server) forwardStdout() {
 	cache := ""
 	buf := make([]byte, 1024)
 	for {
-		num, err := server.stdout.Read(buf)
+		num, err := f.Read(buf)
 		if err != nil && err != io.EOF { //非EOF错误
 			log.Panicln(err)
 		}
@@ -146,28 +145,7 @@ func (server *Server) forwardStdout() {
 		}
 	}
 }
-func (server *Server) forwardStderr() {
-	defer func() {
-		recover()
-		return
-	}()
-	cache := ""
-	buf := make([]byte, 1024)
-	for {
-		num, err := server.stderr.Read(buf)
-		if err != nil && err != io.EOF { //非EOF错误
-			log.Panicln(err)
-		}
-		if num > 0 {
-			str := outputFormatReg.ReplaceAllString(cache+string(buf[:num]), "["+server.name+"/$2]") // 格式化读入的字符串
-			lines := strings.SplitAfter(str, "\n")                                                   // 按行分割开
-			for i := 0; i < len(lines)-1; i++ {
-				log.Print(lines[i])
-			}
-			cache = lines[len(lines)-1] //最后一行下次循环处理
-		}
-	}
-}
+
 func forwardStdin() {
 	stdinReader := bufio.NewReader(os.Stdin)
 	for {
