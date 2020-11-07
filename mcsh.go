@@ -68,8 +68,8 @@ func backup(server *Server, args []string) error {
 // ServerConfig holds all fields of every server in "config.yml/servers"
 type ServerConfig struct {
 	// RootFolder string `yaml:"rootFolder"`
-	ExecOptions string `yaml:"execOptions"`
-	ExecPath    string `yaml:"execPath"`
+	ExecOptions []string `yaml:"execOptions"`
+	ExecPath    string   `yaml:"execPath"`
 }
 
 // Config holds all fields in "config.yml"
@@ -82,7 +82,7 @@ var mcshConfig = Config{
 	CommandPrefix: "#",
 	Servers: map[string]ServerConfig{
 		"serverName1": ServerConfig{
-			ExecOptions: "-Xms4G -Xmm4G --nogui",
+			ExecOptions: []string{"-Xms4G", "-Xmm4G"},
 			ExecPath:    "path/to/your/server/s/exec/jar/file",
 			// RootFolder: "path/to/your/server/root/folder",
 		},
@@ -108,7 +108,8 @@ func (server *Server) run() {
 		return
 	}()
 	config := server.config
-	cmd := exec.Command("java", config.ExecOptions, "-jar", config.ExecPath, "--nogui")
+	args := append(config.ExecOptions, "-jar", config.ExecPath, "--nogui")
+	cmd := exec.Command("java", args...)
 	cmd.Dir = filepath.Dir(config.ExecPath)
 	server.stdin, _ = cmd.StdinPipe()
 	server.stdout, _ = cmd.StdoutPipe()
@@ -118,6 +119,7 @@ func (server *Server) run() {
 	}
 	server.online = true
 	go server.forwardStdout()
+	go server.forwardStderr()
 	if err := cmd.Wait(); err != nil {
 		log.Panicf("server<%s>: Error when running:\n%s", server.name, err.Error())
 	}
@@ -131,6 +133,28 @@ func (server *Server) forwardStdout() {
 	buf := make([]byte, 1024)
 	for {
 		num, err := server.stdout.Read(buf)
+		if err != nil && err != io.EOF { //非EOF错误
+			log.Panicln(err)
+		}
+		if num > 0 {
+			str := outputFormatReg.ReplaceAllString(cache+string(buf[:num]), "["+server.name+"/$2]") // 格式化读入的字符串
+			lines := strings.SplitAfter(str, "\n")                                                   // 按行分割开
+			for i := 0; i < len(lines)-1; i++ {
+				log.Print(lines[i])
+			}
+			cache = lines[len(lines)-1] //最后一行下次循环处理
+		}
+	}
+}
+func (server *Server) forwardStderr() {
+	defer func() {
+		recover()
+		return
+	}()
+	cache := ""
+	buf := make([]byte, 1024)
+	for {
+		num, err := server.stderr.Read(buf)
 		if err != nil && err != io.EOF { //非EOF错误
 			log.Panicln(err)
 		}
