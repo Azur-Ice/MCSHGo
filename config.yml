@@ -2,7 +2,7 @@ command_prefix: "#"
 servers:
     1.16.2 flat:
         # rootFolder: G:\_MC\_Server\_AzurCraft\1.16.2 flat
-        execOptions: -Xms4G -Xmm4G --nogui
+        execOptions: -Xms4G -Xmm4G
         execPath: G:\_MC\_Server\_AzurCraft\1.16.2 flat\server.jar
         # scriptFile: 1.16.2 flat.bat
     # 1.16.2-sit creative:
