@@ -21,11 +21,9 @@ import (
 
 // Dirs
 var (
-	workDir, _ = os.Getwd()
-	// scriptsDir, _ = filepath.Abs("./Scripts")
+	workDir, _    = os.Getwd()
 	backupsDir, _ = filepath.Abs("./Backups")
 )
-var scriptSuffix = ""
 var (
 	commandRegex    *regexp.Regexp
 	forwardReg      *regexp.Regexp
@@ -59,6 +57,9 @@ func backup(server *Server, args []string) error {
 			return err
 		}
 		log.Printf("[%s/INFO]: Backup making successed.\n", server.name)
+	} else if args[0] == "" {
+
+	} else if args[0] == "restore" {
 	}
 	return nil
 }
@@ -81,7 +82,7 @@ type Config struct {
 var mcshConfig = Config{
 	CommandPrefix: "#",
 	Servers: map[string]ServerConfig{
-		"serverName1": ServerConfig{
+		"serverName1": {
 			ExecOptions: []string{"-Xms4G", "-Xmm4G"},
 			ExecPath:    "path/to/your/server/s/exec/jar/file",
 			// RootFolder: "path/to/your/server/root/folder",
@@ -188,7 +189,25 @@ func forwardStdin() {
 				}
 			} else { // 全部服务器
 				for _, server := range servers {
-					server.stdin.Write(append(line, '\n'))
+					if command, ok := getCommand(line); ok { // is #Command, execute
+
+						if command.cmd == "run" && !server.online {
+							server.run()
+						}
+
+						cmdFun, exist := cmds[command.cmd]
+						if !exist {
+							log.Println("MCSH[stdinForward/ERROR]: Command \"" + command.cmd + "\" not found.")
+						} else {
+							cmdFun.(func(server *Server, args []string) error)(server, command.args)
+						}
+
+					} else {
+						_, errWrite := server.stdin.Write(append(line, '\n')) // is not #Command, forward
+						if errWrite != nil {
+							log.Println("MCSH[stdinForward/ERROR]: Server stdin write failed - ", errWrite)
+						}
+					}
 				}
 			}
 		}
@@ -282,7 +301,6 @@ func initRegexs() {
 	outputFormatReg = regexp.MustCompile(`(\[\d\d:\d\d:\d\d\]) *\[.+?\/(.+?)\]`)
 }
 func initDirs() {
-	// os.Mkdir(scriptsDir, 0666)
 	os.Mkdir(backupsDir, 0666)
 }
 func init() {
@@ -291,11 +309,6 @@ func init() {
 	initDirs()
 	readConfig()
 	log.Println("[MCSH/INFO]: Running on", runtime.GOOS)
-	if runtime.GOOS == "windows" {
-		scriptSuffix = ".bat"
-	} else {
-		scriptSuffix = ".sh"
-	}
 }
 
 var servers = make(map[string]*Server)
