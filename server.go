@@ -27,8 +27,12 @@ func NewServer(ServerName string, ServerConfig ServerConfig) *Server {
 		ServerConfig: ServerConfig,
 		InChan:       make(chan string, 8),
 		OutChan:      make(chan string, 8),
-		cmdChan:      make(chan string, 0),
+		cmdChan:      make(chan string),
 	}
+}
+
+func (server *Server) Write(str string) {
+	server.stdin.Write([]byte(str + "\n"))
 }
 
 // Run ...
@@ -37,7 +41,6 @@ func (server *Server) Run(wg *sync.WaitGroup) {
 		recover()
 		server.online = false
 		wg.Done()
-		return
 	}()
 
 	args := append(strings.Split(server.ServerConfig.ExecOptions, " "), "-jar",
@@ -70,7 +73,6 @@ func (server *Server) Run(wg *sync.WaitGroup) {
 func forwardStd(f io.ReadCloser, c chan string) {
 	defer func() {
 		recover()
-		return
 	}()
 	cache := ""
 	buf := make([]byte, 1024)
@@ -108,7 +110,7 @@ func (server *Server) handleCommand() {
 func (server *Server) processIn() {
 	for {
 		line := <-server.InChan
-
+		// fmt.Println(line)
 		if line[:1] == MCSHConfig.CommandPrefix {
 			server.cmdChan <- line[1:]
 		} else {
@@ -116,15 +118,20 @@ func (server *Server) processIn() {
 		}
 	}
 }
-
 func (server *Server) processOut() {
 	for {
 		line := <-server.OutChan
+		// 去掉换行符
+		if i := strings.LastIndex(string(line), "\r"); i > 0 {
+			line = line[:i]
+		} else {
+			line = line[:len(line)-1]
+		}
 		if res := playerOutputReg.FindStringSubmatch(line); len(res) > 1 { // Player
 			player := res[1]
 			text := res[2]
 			log.Println(player + ": " + text)
-			if text[:0] == MCSHConfig.CommandPrefix {
+			if text[:1] == MCSHConfig.CommandPrefix {
 				server.cmdChan <- text[1:]
 			}
 		}
@@ -132,7 +139,6 @@ func (server *Server) processOut() {
 		log.Print(str)
 	}
 }
-
 func (server *Server) processErr() {
 	for {
 		line := <-server.ErrChan

@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	workDir   string
+	// workDir   string
 	backupDir string
 )
 
@@ -71,5 +71,5 @@ func main() {
 
 func init() {
 	log.Println("MCSH[init/INFO]: Initializing...")
-	workDir, _ = os.Getwd()
+	// workDir, _ = os.Getwd()
 }

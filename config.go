@@ -36,7 +36,7 @@ func ReadConfig(config *Config) {
 		}
 		os.Exit(1)
 	}
-	err = yaml.Unmarshal(configYaml, config)
+	yaml.Unmarshal(configYaml, config)
 }
 
 func init() {
