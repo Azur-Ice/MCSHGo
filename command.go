@@ -21,16 +21,16 @@ type Command struct {
 // Cmds ...
 var Cmds = make(map[string]interface{})
 
-func clone(server *Server, args []string) error {
-	server2, exist := servers[args[0]]
-	if exist {
-		server2.Write("stop")
-		backup(server2, []string{"make", "[before clone]"})
-	} else {
-		log.Printf("MCSH[stdinForward/ERROR]: Cannot find running server <%v>\n", string(args[0]))
-	}
-	return nil
-}
+// func clone(server *Server, args []string) error {
+// 	server2, exist := servers[args[0]]
+// 	if exist {
+// 		server2.Write("stop")
+// 		backup(server2, []string{"make", "[before clone]"})
+// 	} else {
+// 		log.Printf("MCSH[stdinForward/ERROR]: Cannot find running server <%v>\n", string(args[0]))
+// 	}
+// 	return nil
+// }
 
 func backup(server *Server, args []string) error {
 	if args[0] == "make" {
@@ -68,7 +68,7 @@ func backup(server *Server, args []string) error {
 
 func load(server *Server, i int) error {
 	res, _ := ioutil.ReadDir(backupDir)
-	backup(server, []string{"make", fmt.Sprintf("Before loading <%s>", res[i].Name())})
+	backup(server, []string{"make", fmt.Sprintf("Before loading %s", res[i].Name())})
 
 	wg.Add(1)
 	server.Write("stop")
@@ -78,7 +78,7 @@ func load(server *Server, i int) error {
 	backupSavePath := path.Join(backupDir, res[i].Name())
 	serverSavePath := path.Join(filepath.Dir(server.ServerConfig.ExecPath), "world")
 	os.RemoveAll(serverSavePath)
-	log.Printf("[%s/INFO]: Loading backup <%s>...\n", server.ServerName, res[i].Name())
+	log.Printf("[%s/INFO]: Loading backup %s...\n", server.ServerName, res[i].Name())
 	err := CopyDir(backupSavePath, serverSavePath)
 	if err != nil {
 		log.Printf("[%s/ERROR]: Backup loading failed.\n", server.ServerName)
@@ -116,5 +116,5 @@ func init() {
 	Cmds["backup"] = backup
 	Cmds["start"] = start
 	Cmds["restart"] = restart
-	Cmds["clone"] = clone
+	// Cmds["clone"] = clone
 }
