@@ -56,17 +56,20 @@ func backup(server *Server, args []string) error {
 }
 
 func load(server *Server, i int) error {
+	server.keepAlive = true
+
 	res, _ := ioutil.ReadDir(backupDir)
 	backup(server, []string{"make", fmt.Sprintf("Before loading %s", res[i].Name())})
 
-	server.keepAlive = true
 	server.Write("stop")
-	for server.online {
+	for !server.isStoped() {
 		time.Sleep(time.Second)
 	}
+
 	backupSavePath := path.Join(backupDir, res[i].Name())
 	serverSavePath := path.Join(filepath.Dir(server.ServerConfig.ExecPath), "world")
 	os.RemoveAll(serverSavePath)
+
 	log.Printf("[%s/INFO]: Loading backup %s...\n", server.ServerName, res[i].Name())
 	err := CopyDir(backupSavePath, serverSavePath)
 	if err != nil {
@@ -77,15 +80,17 @@ func load(server *Server, i int) error {
 	}
 	log.Printf("[%s/INFO]: Backup loading successed.\n", server.ServerName)
 
-	go server.Run(&wg)
+	go server.Start()
+
+	server.keepAlive = false
 	return nil
 }
 
 func start(server *Server, args []string) error {
-	if server.online {
+	if !server.isStoped() {
 		return nil
 	} else {
-		server.Run(&wg)
+		server.Start()
 	}
 
 	return nil
@@ -94,10 +99,10 @@ func start(server *Server, args []string) error {
 func restart(server *Server, args []string) error {
 	server.keepAlive = true
 	server.Write("stop")
-	for server.online {
+	for !server.isStoped() {
 		time.Sleep(time.Second)
 	}
-	go server.Run(&wg)
+	go server.Start()
 	return nil
 }
 
