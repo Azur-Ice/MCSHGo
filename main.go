@@ -52,7 +52,7 @@ func main() {
 
 	for name, serverConfig := range MCSHConfig.Servers {
 		servers[name] = NewServer(name, serverConfig)
-		go servers[name].Run(&wg) // TODO: complete runFunc
+		go servers[name].Run(&wg)
 	}
 	go processInput()
 	wg.Wait()
