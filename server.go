@@ -14,10 +14,12 @@ type Server struct {
 	ServerName               string
 	ServerConfig             ServerConfig
 	online                   bool
+	keepAlive                bool
 	InChan, OutChan, ErrChan chan string
 	cmdChan                  chan string
 	stdin                    io.WriteCloser
 	stdout, stderr           io.ReadCloser
+	cmd                      *exec.Cmd
 }
 
 // NewServer ...
@@ -31,29 +33,48 @@ func NewServer(ServerName string, ServerConfig ServerConfig) *Server {
 	}
 }
 
-func (server *Server) Write(str string) {
-	server.stdin.Write([]byte(str + "\n"))
-}
-
-// Run ...
-func (server *Server) Run(wg *sync.WaitGroup) {
-	defer func() {
-		recover()
-		server.online = false
-		wg.Done()
-	}()
-
+func (server *Server) Init() {
 	args := append(strings.Split(server.ServerConfig.ExecOptions, " "), "-jar",
 		server.ServerConfig.ExecPath, "--nogui")
 	cmd := exec.Command("java", args...)
 	cmd.Dir = filepath.Dir(server.ServerConfig.ExecPath)
 
+	server.cmd = cmd
 	server.stdin, _ = cmd.StdinPipe()
 	server.stdout, _ = cmd.StdoutPipe()
 	server.stderr, _ = cmd.StderrPipe()
+	// fmt.Println(server)
+}
 
-	if err := cmd.Start(); err != nil {
+func (server *Server) Write(str string) {
+	server.stdin.Write([]byte(str + "\n"))
+}
+
+func (server *Server) Tick(wg *sync.WaitGroup) {
+	if err := server.cmd.Wait(); err != nil {
+		log.Panicf("server<%s>: Error when running:\n%s", server.ServerName, err.Error())
+	}
+	server.online = false
+	if !server.keepAlive {
+		wg.Done()
+	}
+}
+
+// Run ...
+func (server *Server) Run(wg *sync.WaitGroup) {
+	server.Init()
+	// fmt.Print(server)
+	defer func() {
+		if err := recover(); err != nil {
+			server.online = false
+		}
+	}()
+
+	if err := server.cmd.Start(); err != nil {
 		log.Panicf("server<%s>: Error when starting:\n%s", server.ServerName, err.Error())
+	}
+	if !server.keepAlive {
+		wg.Add(1)
 	}
 	server.online = true
 
@@ -65,9 +86,7 @@ func (server *Server) Run(wg *sync.WaitGroup) {
 	go server.processErr()
 
 	go server.handleCommand()
-	if err := cmd.Wait(); err != nil {
-		log.Panicf("server<%s>: Error when running:\n%s", server.ServerName, err.Error())
-	}
+	go server.Tick(wg)
 }
 
 func forwardStd(f io.ReadCloser, c chan string) {

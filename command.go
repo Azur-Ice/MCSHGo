@@ -21,17 +21,6 @@ type Command struct {
 // Cmds ...
 var Cmds = make(map[string]interface{})
 
-// func clone(server *Server, args []string) error {
-// 	server2, exist := servers[args[0]]
-// 	if exist {
-// 		server2.Write("stop")
-// 		backup(server2, []string{"make", "[before clone]"})
-// 	} else {
-// 		log.Printf("MCSH[stdinForward/ERROR]: Cannot find running server <%v>\n", string(args[0]))
-// 	}
-// 	return nil
-// }
-
 func backup(server *Server, args []string) error {
 	if args[0] == "make" {
 		comment := GetTimeStamp()
@@ -70,7 +59,7 @@ func load(server *Server, i int) error {
 	res, _ := ioutil.ReadDir(backupDir)
 	backup(server, []string{"make", fmt.Sprintf("Before loading %s", res[i].Name())})
 
-	wg.Add(1)
+	server.keepAlive = true
 	server.Write("stop")
 	for server.online {
 		time.Sleep(time.Second)
@@ -82,6 +71,7 @@ func load(server *Server, i int) error {
 	err := CopyDir(backupSavePath, serverSavePath)
 	if err != nil {
 		log.Printf("[%s/ERROR]: Backup loading failed.\n", server.ServerName)
+		server.keepAlive = false
 		wg.Done()
 		return err
 	}
@@ -102,7 +92,7 @@ func start(server *Server, args []string) error {
 }
 
 func restart(server *Server, args []string) error {
-	wg.Add(1)
+	server.keepAlive = true
 	server.Write("stop")
 	for server.online {
 		time.Sleep(time.Second)
