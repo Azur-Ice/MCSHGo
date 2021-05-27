@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path"
+	"strings"
 	"time"
 )
 
@@ -48,4 +49,26 @@ func CopyDir(srcDir string, dstDir string) error {
 		}
 	}
 	return nil
+}
+
+func ForwardStd(f io.ReadCloser, c chan string) {
+	defer func() {
+		recover()
+	}()
+	cache := ""
+	buf := make([]byte, 1024)
+	for {
+		num, err := f.Read(buf)
+		if err != nil && err != io.EOF { //非EOF错误
+			log.Panicln(err)
+		}
+		if num > 0 {
+			str := cache + string(buf[:num])
+			lines := strings.SplitAfter(str, "\n") // 按行分割开
+			for i := 0; i < len(lines)-1; i++ {
+				c <- lines[i]
+			}
+			cache = lines[len(lines)-1] //最后一行下次循环处理
+		}
+	}
 }

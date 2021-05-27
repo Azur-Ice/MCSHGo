@@ -12,11 +12,11 @@ import (
 type Server struct {
 	ServerName               string
 	ServerConfig             ServerConfig
+	running                  bool
 	keepAlive                bool
 	InChan, OutChan, ErrChan chan string
 	cmdChan                  chan string
 	stdin                    io.WriteCloser
-	stdout, stderr           io.ReadCloser
 	cmd                      *exec.Cmd
 }
 
@@ -25,6 +25,8 @@ func NewServer(ServerName string, ServerConfig ServerConfig) *Server {
 	server := &Server{
 		ServerName:   ServerName,
 		ServerConfig: ServerConfig,
+		running:      false,
+		keepAlive:    false,
 		InChan:       make(chan string, 8),
 		OutChan:      make(chan string, 8),
 		ErrChan:      make(chan string, 8),
@@ -37,82 +39,58 @@ func NewServer(ServerName string, ServerConfig ServerConfig) *Server {
 	return server
 }
 
-func (server *Server) isStoped() bool {
-	if server.cmd == nil {
-		return true
-	}
-	return server.cmd.ProcessState.Exited()
-}
-
 func (server *Server) Write(str string) {
 	server.stdin.Write([]byte(str + "\n"))
 }
 
-// Run ...
-func (server *Server) Start() {
-
-	///// Init Start /////
+func (server *Server) initCmd() {
 	args := append(strings.Split(server.ServerConfig.ExecOptions, " "), "-jar",
 		server.ServerConfig.ExecPath, "--nogui")
 	cmd := exec.Command("java", args...)
 	cmd.Dir = filepath.Dir(server.ServerConfig.ExecPath)
 
 	server.cmd = cmd
-	server.stdin, _ = cmd.StdinPipe()
-	server.stdout, _ = cmd.StdoutPipe()
-	server.stderr, _ = cmd.StderrPipe()
-	///// Init End   /////
+}
 
+// Start ...
+func (server *Server) Start() {
 	defer func() {
 		recover()
-		// if err := recover(); err != nil {
-		// 	server.online = false
-		// }
 	}()
-
+	server.initCmd()
+	server.attachStd()
 	// Start
-	if err := server.cmd.Start(); err != nil {
-		log.Panicf("server<%s>: Error when starting:\n%s", server.ServerName, err.Error())
-	}
 	if !server.keepAlive {
 		wg.Add(1)
 	}
+	server.running = true
+	if err := server.cmd.Start(); err != nil {
+		log.Panicf("server<%s>: Error when starting:\n%s", server.ServerName, err.Error())
+	}
+}
 
-	go forwardStd(server.stdout, server.OutChan)
-	go forwardStd(server.stderr, server.ErrChan)
-
-	go server.processOut()
-	go server.processErr()
-
-	// Stop
+// Wait...
+func (server *Server) Wait() {
+	defer func() {
+		recover()
+	}()
 	if err := server.cmd.Wait(); err != nil {
 		log.Panicf("server<%s>: Error when running:\n%s", server.ServerName, err.Error())
 	}
+	server.running = false
 	if !server.keepAlive {
 		wg.Done()
 	}
 }
 
-func forwardStd(f io.ReadCloser, c chan string) {
-	defer func() {
-		recover()
-	}()
-	cache := ""
-	buf := make([]byte, 1024)
-	for {
-		num, err := f.Read(buf)
-		if err != nil && err != io.EOF { //非EOF错误
-			log.Panicln(err)
-		}
-		if num > 0 {
-			str := cache + string(buf[:num])
-			lines := strings.SplitAfter(str, "\n") // 按行分割开
-			for i := 0; i < len(lines)-1; i++ {
-				c <- lines[i]
-			}
-			cache = lines[len(lines)-1] //最后一行下次循环处理
-		}
-	}
+func (server *Server) attachStd() {
+	server.stdin, _ = server.cmd.StdinPipe()
+	stdout, _ := server.cmd.StdoutPipe()
+	go ForwardStd(stdout, server.OutChan)
+	go server.processOut()
+	stderr, _ := server.cmd.StderrPipe()
+	go ForwardStd(stderr, server.ErrChan)
+	go server.processErr()
 }
 
 func (server *Server) handleCommand() {
@@ -134,13 +112,13 @@ func (server *Server) processIn() {
 		line := <-server.InChan
 		if line[:1] == MCSHConfig.CommandPrefix {
 			server.cmdChan <- line[1:]
-		} else if !server.isStoped() {
+		} else if server.running {
 			server.stdin.Write([]byte(line + "\n"))
 		}
 	}
 }
 func (server *Server) processOut() {
-	for {
+	for server.running {
 		line := <-server.OutChan
 		// 去掉换行符
 		if i := strings.LastIndex(string(line), "\r"); i > 0 {
@@ -161,7 +139,7 @@ func (server *Server) processOut() {
 	}
 }
 func (server *Server) processErr() {
-	for {
+	for server.running {
 		line := <-server.ErrChan
 		log.Print(line)
 	}

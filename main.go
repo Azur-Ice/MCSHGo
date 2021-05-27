@@ -33,7 +33,7 @@ func processInput() {
 			res := forwardReg.FindSubmatch(line)
 			if res != nil { // 转发到特定服务器
 				server, exist := servers[string(res[1])]
-				if exist && !server.isStoped() {
+				if exist {
 					server.InChan <- string(res[2])
 				} else {
 					log.Printf("MCSH[stdinForward/ERROR]: Cannot find running server <%v>\n", string(res[1]))
@@ -52,12 +52,19 @@ func main() {
 
 	for name, serverConfig := range MCSHConfig.Servers {
 		servers[name] = NewServer(name, serverConfig)
-		go servers[name].Start()
+		servers[name].Start()
+		go servers[name].Wait()
 	}
 	go processInput()
 	wg.Wait()
 
 	// test:
+	// 	cmd := exec.Command("cmd", "H:\\Projects-Go\\MCSHGo\\test.bat")
+	// 	fmt.Println(cmd)
+	// 	err := cmd.Run()
+	// 	fmt.Println(err)
+	// 	fmt.Println(cmd)
+	// 	cmd.Run()
 	// 	dst := path.Join(backupDir,
 	// 		fmt.Sprintf("%s - %s %s", "serverName", GetTimeStamp(), "comment"))
 	// 	src := path.Join(filepath.Dir(MCSHConfig.Servers["serverName1"].ExecPath), "world")

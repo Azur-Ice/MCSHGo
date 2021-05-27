@@ -51,18 +51,24 @@ func backup(server *Server, args []string) error {
 		if err == nil {
 			load(server, i)
 		}
+	} else if args[0] == "del" {
+		// TODO: Backup del
+		// for i, index := range(args[1:]) {
+
+		// }
+
 	}
 	return nil
 }
 
 func load(server *Server, i int) error {
-	server.keepAlive = true
-
+	// TODO: Err handle
 	res, _ := ioutil.ReadDir(backupDir)
 	backup(server, []string{"make", fmt.Sprintf("Before loading %s", res[i].Name())})
 
+	server.keepAlive = true
 	server.Write("stop")
-	for !server.isStoped() {
+	for server.running {
 		time.Sleep(time.Second)
 	}
 
@@ -80,17 +86,19 @@ func load(server *Server, i int) error {
 	}
 	log.Printf("[%s/INFO]: Backup loading successed.\n", server.ServerName)
 
-	go server.Start()
-
+	server.Start()
 	server.keepAlive = false
+	go server.Wait()
+
 	return nil
 }
 
 func start(server *Server, args []string) error {
-	if !server.isStoped() {
+	if server.running {
 		return nil
 	} else {
 		server.Start()
+		go server.Wait()
 	}
 
 	return nil
@@ -99,10 +107,11 @@ func start(server *Server, args []string) error {
 func restart(server *Server, args []string) error {
 	server.keepAlive = true
 	server.Write("stop")
-	for !server.isStoped() {
+	for server.running {
 		time.Sleep(time.Second)
 	}
-	go server.Start()
+	server.Start()
+	go server.Wait()
 	return nil
 }
 
